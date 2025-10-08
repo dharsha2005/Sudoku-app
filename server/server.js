@@ -10,9 +10,22 @@ const { errorHandler } = require('./middleware/auth');
 const app = express();
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://sudoku-app-secf.onrender.com'
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL === '*' ? '*' : (process.env.FRONTEND_URL || 'http://localhost:3000'),
-  credentials: process.env.FRONTEND_URL === '*' ? false : true
+  origin: (origin, callback) => {
+    if (process.env.FRONTEND_URL === '*') {
+      callback(null, true);
+    } else if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 };
 app.use(cors(corsOptions));
 app.use(express.json());
