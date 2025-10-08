@@ -23,8 +23,22 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'Sudoku API is running',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      game: '/api/game'
+    },
+    documentation: 'Check the API documentation for available endpoints'
+  });
+});
+
 // Connect to MongoDB Atlas
-const MONGODB_URI = 'mongodb+srv://onlytamilan6_db_user:08-Aug-05@cluster0.irjjr71.mongodb.net/sudoku-uid?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://onlytamilan6_db_user:08-Aug-05@cluster0.irjjr71.mongodb.net/sudoku-uid?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
