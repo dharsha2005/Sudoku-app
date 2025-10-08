@@ -11,7 +11,7 @@ const app = express();
 
 // Middleware
 const corsOptions = {
-  origin: process.env.FRONTEND_URL === '*' ? '*' : (process.env.FRONTEND_URL || 'http://localhost:3000'),
+  origin: process.env.FRONTEND_URL === '*' ? '*' : (process.env.FRONTEND_URL || 'https://sudoku-app-secf.onrender.com/'),
   credentials: process.env.FRONTEND_URL === '*' ? false : true
 };
 app.use(cors(corsOptions));
