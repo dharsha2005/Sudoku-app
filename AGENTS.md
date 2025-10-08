@@ -199,11 +199,18 @@ sudoku-uid/
 4. Set up production email service
 5. Update CORS settings for production domain
 
-### MongoDB Atlas
-- Create cluster
-- Whitelist IP addresses
-- Create database user
-- Use connection string in MONGODB_URI
+### MongoDB Atlas (Cloud Database)
+- **IMPORTANT:** This project uses MongoDB Atlas (cloud), NOT local MongoDB
+- Free tier: 512MB storage
+- Setup guide: See MONGODB_ATLAS_SETUP.md for complete instructions
+- Quick setup:
+  1. Create cluster at https://www.mongodb.com/cloud/atlas
+  2. Create database user (username + password)
+  3. Whitelist all IPs: 0.0.0.0/0 (Network Access)
+  4. Get connection string from "Connect" → "Connect your application"
+  5. Format: mongodb+srv://username:password@cluster.xxxxx.mongodb.net/sudoku-game
+- Use connection string in MONGODB_URI environment variable
+- Can still use MongoDB Compass locally to connect to Atlas database
 
 ### Email (Gmail)
 - Enable 2-Step Verification

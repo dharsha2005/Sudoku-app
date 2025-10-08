@@ -5,28 +5,62 @@ This is the backend server for the Sudoku game, built with Node.js, Express, and
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- MongoDB (local or MongoDB Atlas)
+- MongoDB Atlas account (free tier available)
+- Gmail account with App Password
 - npm or yarn
 
 ## Setup
 
-1. Install dependencies:
+1. **Install dependencies:**
    ```bash
    cd server
    npm install
    ```
 
-2. Create a `.env` file in the server directory with the following variables:
-   ```
-   PORT=5000
-   MONGODB_URI=mongodb://localhost:27017/sudoku-game
-   JWT_SECRET=your_jwt_secret_key_here
-   NODE_ENV=development
-   ```
+2. **Setup MongoDB Atlas:**
+   - See [MONGODB_ATLAS_SETUP.md](../MONGODB_ATLAS_SETUP.md) for detailed instructions
+   - Quick steps:
+     1. Create free cluster at https://www.mongodb.com/cloud/atlas
+     2. Create database user
+     3. Whitelist IP (0.0.0.0/0 for development)
+     4. Get connection string
 
-3. Start the development server:
+3. **Setup Gmail App Password:**
+   - Enable 2-Step Verification in Google Account
+   - Generate App Password at https://myaccount.google.com/apppasswords
+   - Copy the 16-character password
+
+4. **Create `.env` file in server directory:**
+   ```env
+   PORT=5000
+   NODE_ENV=development
+   
+   # MongoDB Atlas Connection String
+   MONGODB_URI=mongodb+srv://username:password@cluster.xxxxx.mongodb.net/sudoku-game?retryWrites=true&w=majority
+   
+   # JWT Secret
+   JWT_SECRET=your_super_secret_jwt_key_here
+   
+   # Gmail Configuration
+   EMAIL_SERVICE=gmail
+   EMAIL_USER=your_email@gmail.com
+   EMAIL_PASSWORD=your_16_char_app_password
+   
+   # Frontend URL
+   FRONTEND_URL=http://localhost:3000
+   ```
+   
+   See `.env.example` for reference.
+
+5. **Start the development server:**
    ```bash
    npm run dev
+   ```
+   
+   You should see:
+   ```
+   Server running on port 5000
+   MongoDB connected ✅
    ```
 
 ## API Endpoints
