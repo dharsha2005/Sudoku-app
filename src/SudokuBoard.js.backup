@@ -1,0 +1,494 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import './SudokuBoard.css';
+import { generateSudokuPuzzle, isPuzzleSolved } from './utils/sudokuGenerator';
+import { saveGameProgress } from './services/api';
+
+function SudokuBoard({
+  size, 
+  regions = Math.sqrt(size), 
+  regionRows, 
+  regionCols, 
+  isSamurai = false, 
+  difficulty = 'medium',
+  level = 1,
+  onComplete 
+}) {
+  // Ensure difficulty is always one of 'easy', 'medium', or 'hard'
+  const normalizedDifficulty = ['easy', 'medium', 'hard'].includes(difficulty.toLowerCase())
+    ? difficulty.toLowerCase()
+    : 'medium';
+
+  // Use the level from props, default to 1 if not provided
+  const [currentLevel, setCurrentLevel] = useState(level || 1);
+  const [board, setBoard] = useState([]);
+  const [initialBoard, setInitialBoard] = useState([]);
+  const [solution, setSolution] = useState([]);
+  const [isValid, setIsValid] = useState(true);
+  const [isComplete, setIsComplete] = useState(false);
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(0);
+  const [timeElapsed, setTimeElapsed] = useState(0);
+  const [hintUsed, setHintUsed] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  
+  const timerRef = useRef(null);
+  const startTimeRef = useRef(null);
+  
+  // Calculate region dimensions if not provided
+  const regionWidth = regionCols || regions;
+  const regionHeight = regionRows || regions;
+
+  // Timer effect
+  useEffect(() => {
+    if (isComplete) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+    
+    if (isPaused) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+    
+    // Start or resume timer
+    if (!timerRef.current) {
+      timerRef.current = setInterval(() => {
+        setTimeElapsed(prev => prev + 1);
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isComplete, isPaused]);
+  
+  // Format time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate score based on difficulty, time, and moves
+  const calculateScore = (difficulty, time, moves, hintUsed) => {
+    let baseScore = 0;
+    
+    // Base points based on difficulty
+    switch(difficulty) {
+      case 'easy': baseScore = 100; break;
+      case 'medium': baseScore = 250; break;
+      case 'hard': baseScore = 500; break;
+      case 'expert': baseScore = 1000; break;
+      default: baseScore = 100;
+    }
+    
+    // Time bonus (faster is better)
+    const timeBonus = Math.max(0, 300 - time) * 2; // Max 10 minutes
+    
+    // Move penalty (fewer moves is better)
+    const movePenalty = Math.min(50, moves * 2);
+    
+    // Hint penalty
+    const hintPenalty = hintUsed ? 50 : 0;
+    
+    return baseScore + timeBonus - movePenalty - hintPenalty;
+  };
+
+  // Generate a new puzzle
+  const generatePuzzle = useCallback(() => {
+    const { puzzle, solution } = generateSudokuPuzzle(
+      size, 
+      normalizedDifficulty, // Use the normalized difficulty
+      regionHeight, 
+      regionWidth
+    );
+    
+    setBoard(JSON.parse(JSON.stringify(puzzle)));
+    setInitialBoard(JSON.parse(JSON.stringify(puzzle)));
+    setSolution(JSON.parse(JSON.stringify(solution)));
+    setMoves(0);
+    setTimeElapsed(0);
+    setHintUsed(false);
+    startTimeRef.current = Date.now();
+    
+    return { puzzle, solution };
+  }, [size, normalizedDifficulty, regionHeight, regionWidth]);
+
+  // Reset the board to initial state
+  const resetBoard = useCallback(() => {
+    generatePuzzle();
+    setIsValid(true);
+    setIsComplete(false);
+  }, [generatePuzzle]);
+
+  // Initialize the board
+  useEffect(() => {
+    resetBoard();
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [resetBoard]);
+
+  // Check if the current board is valid
+  const validateBoard = useCallback((boardToValidate) => {
+    // Check rows and columns
+    for (let i = 0; i < size; i++) {
+      const row = new Set();
+      const col = new Set();
+      
+      for (let j = 0; j < size; j++) {
+        // Check row
+        if (boardToValidate[i][j] !== '') {
+          if (row.has(boardToValidate[i][j])) return false;
+          row.add(boardToValidate[i][j]);
+        }
+        
+        // Check column
+        if (boardToValidate[j][i] !== '') {
+          if (col.has(boardToValidate[j][i])) return false;
+          col.add(boardToValidate[j][i]);
+        }
+      }
+    }
+
+    // Check regions
+    for (let boxRow = 0; boxRow < regionHeight; boxRow++) {
+      for (let boxCol = 0; boxCol < regionWidth; boxCol++) {
+        const region = new Set();
+        
+        for (let i = 0; i < regionHeight; i++) {
+          for (let j = 0; j < regionWidth; j++) {
+            const row = boxRow * regionHeight + i;
+            const col = boxCol * regionWidth + j;
+            const value = boardToValidate[row]?.[col];
+            
+            if (value !== '') {
+              if (region.has(value)) return false;
+              region.add(value);
+            }
+          }
+        }
+      }
+    }
+    
+    return true;
+  }, [size, regionHeight, regionWidth]);
+
+  // Check if the board is complete
+  useEffect(() => {
+    if (board.length === 0 || board[0].length === 0 || !solution) return;
+    
+    const complete = isPuzzleSolved(board, solution);
+    
+    if (complete && !isComplete) { // Only run this once when the game is completed
+      setIsComplete(true);
+      
+      // Stop the timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      
+      // Calculate final score
+      const finalScore = calculateScore(normalizedDifficulty, timeElapsed, moves, hintUsed);
+      setScore(finalScore);
+      
+      // Prepare completion data
+      const completionData = {
+        time: timeElapsed,
+        difficulty: normalizedDifficulty,
+        level: currentLevel,
+        score: finalScore,
+        moves,
+        isSamurai,
+        boardSize: size
+      };
+      
+      // Notify parent component of victory with all relevant data
+      if (onComplete) {
+        onComplete(completionData);
+      }
+      
+      // Save game progress (don't await to avoid blocking UI)
+      saveGameProgress(completionData)
+        .then(result => {
+          if (!result.success) {
+            console.log('Game progress not saved:', result.message);
+          } else {
+            console.log('Game progress saved successfully');
+          }
+        })
+        .catch(error => {
+          console.error('Error saving game progress:', error);
+        });
+      
+      // Increment level for the next game
+      setCurrentLevel(prevLevel => prevLevel + 1);
+    }
+    
+    return () => {}; // No cleanup needed for this effect
+  }, [board, normalizedDifficulty, timeElapsed, moves, hintUsed, currentLevel, size, isSamurai, onComplete, solution, isComplete, isPuzzleSolved]);
+
+  // Handle cell input change
+  const handleInputChange = (row, col, value) => {
+    // Only allow numbers 1-size or empty string
+    const validInput = value === '' || 
+      (parseInt(value) >= 1 && parseInt(value) <= size);
+    
+    if (!validInput || initialBoard[row][col] !== '') return;
+    
+    const newBoard = board.map((r, i) =>
+      r.map((cell, j) => (i === row && j === col ? value : cell))
+    );
+    
+    setBoard(newBoard);
+    setMoves(prevMoves => prevMoves + 1);
+    
+    // Validate the board after each change
+    const isValidMove = validateBoard(newBoard);
+    setIsValid(isValidMove);
+    
+    // Check if the board is complete
+    const isPuzzleComplete = isPuzzleSolved(newBoard);
+    setIsComplete(isPuzzleComplete);
+    
+    // Auto-save progress
+    if (!isPuzzleComplete) {
+      const gameData = {
+        difficulty: difficulty || 'medium', // Ensure difficulty is always set
+        time: timeElapsed,
+        moves: moves + 1,
+        score: score || 0, // Ensure score is always a number
+        boardSize: size,
+        isSamurai: isSamurai || false, // Ensure isSamurai is always a boolean
+        level: level || 1 // Ensure level is always a number
+      };
+      
+      // Only include board and initialBoard if they're not too large
+      if (JSON.stringify(newBoard).length < 1000) {
+        gameData.board = newBoard;
+      }
+      
+      saveGameProgress(gameData).catch(console.error);
+    }
+  };
+  
+  // Get a hint
+  const getHint = () => {
+    // Find an empty cell
+    const emptyCells = [];
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+        if (board[i][j] === '' && initialBoard[i][j] === '') {
+          emptyCells.push({ row: i, col: j });
+        }
+      }
+    }
+    
+    if (emptyCells.length > 0) {
+      // Pick a random empty cell
+      const { row, col } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+      
+      // Fill in the correct value
+      const newBoard = board.map((r, i) =>
+        r.map((cell, j) => (i === row && j === col ? solution[row][col] : cell))
+      );
+      
+      setBoard(newBoard);
+      setHintUsed(true);
+      
+      // Check if the board is complete with the hint
+      const isPuzzleComplete = isPuzzleSolved(newBoard, solution);
+      setIsComplete(isPuzzleComplete);
+    }
+  };
+  
+  // Toggle pause
+  const togglePause = () => {
+    setIsPaused(!isPaused);
+    if (isPaused) {
+      // Resume timer
+      timerRef.current = setInterval(() => {
+        setTimeElapsed(prev => prev + 1);
+      }, 1000);
+    } else {
+      // Pause timer
+      clearInterval(timerRef.current);
+    }
+  };
+  
+  // Reset the game
+  const resetGame = () => {
+    clearInterval(timerRef.current);
+    setTimeElapsed(0);
+    setMoves(0);
+    setHintUsed(false);
+    generatePuzzle();
+  };
+
+  // Solve the board
+  const solveBoard = () => {
+    if (window.confirm('Are you sure you want to solve the puzzle? This will end the current game.')) {
+      setBoard(JSON.parse(JSON.stringify(solution)));
+      setIsComplete(true);
+      clearInterval(timerRef.current);
+    }
+  };
+
+  // Get cell class based on position and state
+  const getCellClass = (row, col) => {
+    const classes = ['sudoku-cell'];
+    
+    // Add region borders
+    if (row % regionHeight === 0) classes.push('region-top');
+    if (col % regionWidth === 0) classes.push('region-left');
+    if ((row + 1) % regionHeight === 0) classes.push('region-bottom');
+    if ((col + 1) % regionWidth === 0) classes.push('region-right');
+    
+    // Add samurai specific styling
+    if (isSamurai) {
+      const center = Math.floor(size / 2);
+      const isCenter = row >= center - 3 && row <= center + 3 && 
+                       col >= center - 3 && col <= center + 3;
+      if (isCenter) classes.push('center-grid');
+    }
+    
+    return classes.join(' ');
+  };
+
+  // Calculate cell font size based on grid size
+  const getCellStyle = () => {
+    if (size <= 9) return { fontSize: '20px' };
+    if (size <= 16) return { fontSize: '16px' };
+    return { fontSize: '12px' };
+  };
+
+  return (
+    <div className="sudoku-game">
+      <div className="game-stats">
+        <div className="stat-box">
+          <div className="stat-label">Time</div>
+          <div className="stat-value">{formatTime(timeElapsed)}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Moves</div>
+          <div className="stat-value">{moves}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Level</div>
+          <div className="stat-value">{level}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Score</div>
+          <div className="stat-value">{score}</div>
+        </div>
+      </div>
+      
+      <div className="sudoku-controls">
+        <select 
+          value={difficulty} 
+          onChange={(e) => {
+            // Notify parent component about difficulty change
+            if (onComplete) {
+              onComplete(timeElapsed, e.target.value);
+            }
+          }}
+          className="difficulty-selector"
+          disabled={!isComplete}
+        >
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+        </select>
+        
+        <button 
+          onClick={resetGame} 
+          className="control-btn new-game-btn"
+        >
+          New Game
+        </button>
+        
+        <button 
+          onClick={togglePause} 
+          className={`control-btn ${isPaused ? 'resume-btn' : 'pause-btn'}`}
+          disabled={isComplete}
+        >
+          {isPaused ? 'Resume' : 'Pause'}
+        </button>
+        
+        <button 
+          onClick={getHint} 
+          className="control-btn hint-btn"
+          disabled={isComplete || hintUsed}
+          title={hintUsed ? 'You already used a hint' : 'Get a hint (one per game)'}
+        >
+          Hint
+        </button>
+        
+        <button 
+          onClick={solveBoard} 
+          className="control-btn solve-btn"
+          disabled={isComplete}
+        >
+          Solve
+        </button>
+      </div>
+      
+      <div 
+        className={`sudoku-container ${isSamurai ? 'samurai' : ''}`}
+        style={{
+          '--size': size,
+          '--cell-size': isSamurai ? '30px' : '40px',
+          '--region-size': regions
+        }}
+      >
+        {board.map((row, i) =>
+          row.map((cell, j) => (
+            <input
+              key={`${i}-${j}`}
+              className={getCellClass(i, j)}
+              style={getCellStyle()}
+              maxLength={size > 9 ? 2 : 1}
+              value={cell}
+              onChange={(e) => handleInputChange(i, j, e.target.value)}
+              disabled={initialBoard[i][j] !== ''}
+              aria-label={`Cell ${i+1},${j+1}`}
+            />
+          ))
+        )}
+      </div>
+      
+      <div className="game-status">
+        {isComplete ? (
+          <div className="success-message">
+            <h3>Puzzle Complete! 🎉</h3>
+            <p>Level {level} completed in {formatTime(timeElapsed)} with {moves} moves!</p>
+            <p>You earned {calculateScore(difficulty, timeElapsed, moves, hintUsed)} points!</p>
+            <button 
+              onClick={resetGame} 
+              className="control-btn next-level-btn"
+            >
+              Next Level
+            </button>
+          </div>
+        ) : !isValid ? (
+          <div className="error-message">Invalid move! Try again.</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default SudokuBoard;

@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: sudoku-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_SERVICE
+        value: gmail
+      - key: FRONTEND_URL
+        sync: false
