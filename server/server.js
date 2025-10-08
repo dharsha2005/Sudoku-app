@@ -16,6 +16,7 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
+<<<<<<< HEAD
   origin: (origin, callback) => {
     if (process.env.FRONTEND_URL === '*') {
       callback(null, true);
@@ -26,6 +27,10 @@ const corsOptions = {
     }
   },
   credentials: true
+=======
+  origin: process.env.FRONTEND_URL === '*' ? '*' : (process.env.FRONTEND_URL || 'https://sudoku-app-secf.onrender.com/'),
+  credentials: process.env.FRONTEND_URL === '*' ? false : true
+>>>>>>> b4c427c680e94f0e4dbfdf1163e860443793d6c8
 };
 app.use(cors(corsOptions));
 app.use(express.json());
